@@ -1,0 +1,113 @@
+name: Azure — Build Kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      ksu_variant:
+        description: 'Root — Manager'
+        type: choice
+        options: [ALL, KSUN, ReSuKiSU, VNL]
+        default: ALL
+      clang_variant:
+        description: 'Clang — Toolchain'
+        type: choice
+        options: [ALL, CLANG-19, CLANG-22]
+        default: CLANG-22
+      kpm_enabled:
+        description: 'Enable KPM (ReSuKiSU only)'
+        type: boolean
+        default: true
+      kernel_ref:
+        description: 'Kernel branch / tag / SHA'
+        type: string
+        default: android12-5.10
+      susfs_branch:
+        description: 'SUSFS'
+        type: string
+        default: gki-android12-5.10
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      ksu_list: ${{ steps.resolve.outputs.ksu_list }}
+      clang_list: ${{ steps.resolve.outputs.clang_list }}
+    steps:
+      - name: Resolve — Matrix
+        id: resolve
+        run: |
+          if [ "${{ inputs.ksu_variant }}" = "ALL" ]; then
+            echo 'ksu_list=["KSUN","ReSuKiSU","VNL"]' >> $GITHUB_OUTPUT
+          else
+            echo 'ksu_list=["${{ inputs.ksu_variant }}"]' >> $GITHUB_OUTPUT
+          fi
+          if [ "${{ inputs.clang_variant }}" = "ALL" ]; then
+            echo 'clang_list=["CLANG-19","CLANG-22"]' >> $GITHUB_OUTPUT
+          else
+            echo 'clang_list=["${{ inputs.clang_variant }}"]' >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ksu: ${{ fromJson(needs.setup.outputs.ksu_list) }}
+        clang: ${{ fromJson(needs.setup.outputs.clang_list) }}
+    env:
+      KERNEL_REPO:       ${{ vars.KERNEL_REPO }}
+      ANYKERNEL3_REPO:   ${{ vars.ANYKERNEL3_REPO }}
+      CLANG19_REPO:      ${{ vars.CLANG19_REPO }}
+      CLANG22_URL:       ${{ vars.CLANG22_URL }}
+      RESUKISU_SETUP_URL: ${{ vars.RESUKISU_SETUP_URL }}
+      KSUN_SETUP_URL:    ${{ vars.KSUN_SETUP_URL }}
+      SUSFS_REPO:        ${{ vars.SUSFS_REPO }}
+
+    steps:
+      - name: Checkout — Workflow
+        uses: actions/checkout@v4
+
+      - name: Checkout — Source Kernel
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.KERNEL_REPO }}
+          ref: ${{ inputs.kernel_ref }}
+          path: kernel
+          fetch-depth: 1
+
+      - name: Setup — Env
+        env:
+          CLANG_VARIANT: ${{ matrix.clang }}
+        run: |
+          bash scripts/setup-env.sh
+          bash scripts/setup-toolchain.sh
+
+      - name: Inject — Root
+        working-directory: kernel
+        env:
+          KSU_VARIANT:   ${{ matrix.ksu }}
+          KPM_ENABLED:   ${{ inputs.kpm_enabled }}
+          SUSFS_BRANCH:  ${{ inputs.susfs_branch }}
+        run: bash "$GITHUB_WORKSPACE/scripts/inject-root.sh"
+
+      - name: Build — Kernel
+        working-directory: kernel
+        env:
+          CLANG_VARIANT: ${{ matrix.clang }}
+        run: bash "$GITHUB_WORKSPACE/scripts/build-kernel.sh"
+
+      - name: Package
+        env:
+          KSU_VARIANT:   ${{ matrix.ksu }}
+          CLANG_VARIANT: ${{ matrix.clang }}
+          KERNEL_REF:    ${{ inputs.kernel_ref }}
+        run: bash scripts/package.sh
+
+      - name: Upload — Zip Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}.zip
+          if-no-files-found: error
+          compression-level: 0
