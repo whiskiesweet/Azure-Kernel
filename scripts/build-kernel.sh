@@ -24,7 +24,7 @@ sed -i 's/^EXTRAVERSION[[:space:]]*=.*/EXTRAVERSION =/' Makefile
 
 # ── Set LOCALVERSION ──────────────────────────────────────────────────────────
 
-printf '\nCONFIG_LOCALVERSION="%s"\n' "${LOCALVERSION}" \
+printf '\nCONFIG_LOCALVERSION="%s"\n' "${KERNEL_LOCALVERSION}" \
     >> arch/arm64/configs/gki_defconfig
 
 # ── Polly ─────────────────────────────────────────────────────────────────────
