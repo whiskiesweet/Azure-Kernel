@@ -25,7 +25,18 @@ on:
         description: 'SUSFS'
         type: string
         default: gki-android12-5.10
-
+      upload_mode:
+        description: 'Upload — Destination'
+        type: choice
+        options:
+          - Artifact
+          - Release
+          - Both
+        default: Artifact
+        
+permissions:
+  contents: write
+  
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -105,9 +116,20 @@ jobs:
         run: bash scripts/package.sh
 
       - name: Upload — Zip Artifact
+        if: inputs.upload_mode == 'Artifact' || inputs.upload_mode == 'Both'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ZIP_NAME }}
           path: ${{ env.ZIP_NAME }}.zip
           if-no-files-found: error
           compression-level: 0
+          
+      - name: Upload — Release
+        if: inputs.upload_mode == 'Release' || inputs.upload_mode == 'Both'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-${{ github.run_id }}
+          name: Azure Kernel Build #${{ github.run_number }}
+          files: ${{ env.ZIP_NAME }}.zip
+          overwrite_files: true           
+          generate_release_notes: true
