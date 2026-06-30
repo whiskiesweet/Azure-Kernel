@@ -22,6 +22,26 @@ echo "Clang version : $(${CLANG_PATH}/bin/clang --version | head -n1)"
 echo "=== Stripping EXTRAVERSION ==="
 sed -i 's/^EXTRAVERSION[[:space:]]*=.*/EXTRAVERSION =/' Makefile
 
+# ── Memory management tuning (native default, low-RAM + ZMC friendly) ─────────
+
+echo "=== Applying memory management defaults (swappiness, watermark) ==="
+
+SWAPPINESS_FILE="mm/vmscan.c"
+grep -q "^int vm_swappiness" "$SWAPPINESS_FILE" \
+    || { echo "ERROR: vm_swappiness default not found in $SWAPPINESS_FILE" >&2; exit 1; }
+sed -i 's/^int vm_swappiness[[:space:]]*=.*/int vm_swappiness = 100;/' "$SWAPPINESS_FILE"
+grep -q "^int vm_swappiness = 100;" "$SWAPPINESS_FILE" \
+    || { echo "ERROR: failed to set vm_swappiness default" >&2; exit 1; }
+echo "vm_swappiness default -> 100 (mm/vmscan.c)"
+
+WATERMARK_FILE="mm/page_alloc.c"
+if grep -q "^int watermark_scale_factor" "$WATERMARK_FILE"; then
+    sed -i 's/^int watermark_scale_factor[[:space:]]*=.*/int watermark_scale_factor = 125;/' "$WATERMARK_FILE"
+    echo "watermark_scale_factor default -> 125 (mm/page_alloc.c)"
+else
+    echo "NOTE: watermark_scale_factor default not found in $WATERMARK_FILE, skipped (non-fatal)."
+fi
+
 # ── Set LOCALVERSION ──────────────────────────────────────────────────────────
 
 printf '\nCONFIG_LOCALVERSION="%s"\n' "${KERNEL_LOCALVERSION}" \
@@ -144,6 +164,11 @@ grep -E "CONFIG_SUSPEND|CONFIG_PM_SLEEP|CONFIG_PM_AUTOSLEEP|CONFIG_ARM_PSCI_CPUI
 
 echo "--- ZRAM + ZMC ---"
 grep -E "CONFIG_ZRAM|CONFIG_ZRAM_MULTI_COMP|CONFIG_ZRAM_DEF_COMP" out/.config | grep -v "^#" || true
+
+echo "--- Memory management defaults ---"
+grep "^int vm_swappiness" mm/vmscan.c || true
+grep "^int watermark_scale_factor" mm/page_alloc.c 2>/dev/null || true
+grep "^CONFIG_PSI=y\|^CONFIG_DAMON_RECLAIM=y" out/.config || true
 
 echo "--- Kernel release string ---"
 KRELEASE=$(make -s O=out CC=clang LLVM=1 CROSS_COMPILE="${CROSS_COMPILE}" kernelrelease 2>/dev/null)
