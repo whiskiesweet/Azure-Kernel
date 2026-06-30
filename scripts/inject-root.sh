@@ -98,8 +98,23 @@ if [ "${KSU_VARIANT}" = "KWS" ]; then
     [ -f "$SYSVIPC_PATCH" ] || { echo "ERROR: SYSVIPC kABI patch not found" >&2; exit 1; }
     [ -f "$MQUEUE_PATCH" ]  || { echo "ERROR: POSIX_MQUEUE kABI patch not found" >&2; exit 1; }
 
-    patch -p1 --fuzz=3 < "$SYSVIPC_PATCH"
-    patch -p1 --fuzz=3 < "$MQUEUE_PATCH"
+    apply_droidspaces_patch() {
+        local patch_file="$1"
+        if patch -p1 -N --dry-run --silent < "$patch_file" >/dev/null 2>&1; then
+            patch -p1 -N < "$patch_file"
+            echo "Applied: $(basename "$patch_file")"
+        elif patch -p1 -N --dry-run --reverse --silent < "$patch_file" >/dev/null 2>&1; then
+            echo "SKIP (already applied upstream): $(basename "$patch_file")"
+        else
+            echo "ERROR: patch does not apply cleanly: $(basename "$patch_file")" >&2
+            echo "--- dry-run output for diagnostics ---" >&2
+            patch -p1 -N --dry-run < "$patch_file" >&2 || true
+            exit 1
+        fi
+    }
+
+    apply_droidspaces_patch "$SYSVIPC_PATCH"
+    apply_droidspaces_patch "$MQUEUE_PATCH"
     rm -rf droidspaces
     echo "Droidspaces kABI patches applied OK"
 fi
