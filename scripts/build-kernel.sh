@@ -64,6 +64,37 @@ echo "ZMC backport OK"
 grep -q "^CONFIG_ZRAM_MULTI_COMP" arch/arm64/configs/gki_defconfig \
     || echo "CONFIG_ZRAM_MULTI_COMP=y" >> arch/arm64/configs/gki_defconfig
 
+# ── Droidspaces support (KowSU variant only) ──────────────────────────────────
+
+if [ "${KSU_VARIANT:-}" = "KWS" ]; then
+    echo "=== Applying Droidspaces GKI-safe defconfig options ==="
+    DEFCONFIG="arch/arm64/configs/gki_defconfig"
+    for opt in \
+        CONFIG_SYSVIPC \
+        CONFIG_POSIX_MQUEUE \
+        CONFIG_IPC_NS \
+        CONFIG_PID_NS \
+        CONFIG_DEVTMPFS \
+        CONFIG_NETFILTER_XT_MATCH_ADDRTYPE \
+        CONFIG_NETFILTER_XT_TARGET_REJECT \
+        CONFIG_NETFILTER_XT_TARGET_LOG \
+        CONFIG_NETFILTER_XT_MATCH_RECENT \
+        CONFIG_IP_SET \
+        CONFIG_IP_SET_HASH_IP \
+        CONFIG_IP_SET_HASH_NET \
+        CONFIG_NETFILTER_XT_SET \
+        CONFIG_TMPFS_POSIX_ACL \
+        CONFIG_TMPFS_XATTR \
+    ; do
+        if grep -q "^# ${opt} is not set" "$DEFCONFIG"; then
+            sed -i "s/^# ${opt} is not set/${opt}=y/" "$DEFCONFIG"
+        elif ! grep -q "^${opt}=y" "$DEFCONFIG"; then
+            echo "${opt}=y" >> "$DEFCONFIG"
+        fi
+    done
+    echo "Droidspaces defconfig options applied."
+fi
+
 # ── Generate config ───────────────────────────────────────────────────────────
 
 make O=out gki_defconfig

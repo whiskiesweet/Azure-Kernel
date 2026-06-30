@@ -6,7 +6,7 @@ on:
       ksu_variant:
         description: 'Root — Manager'
         type: choice
-        options: [ALL, KSUN, ReSuKiSU, VNL]
+        options: [ALL, KSUN, ReSuKiSU, VNL, KWS]
         default: ALL
       clang_variant:
         description: 'Clang — Toolchain'
@@ -37,7 +37,7 @@ jobs:
         id: resolve
         run: |
           if [ "${{ inputs.ksu_variant }}" = "ALL" ]; then
-            echo 'ksu_list=["KSUN","ReSuKiSU","VNL"]' >> $GITHUB_OUTPUT
+            echo 'ksu_list=["KSUN","ReSuKiSU","VNL","KWS"]' >> $GITHUB_OUTPUT
           else
             echo 'ksu_list=["${{ inputs.ksu_variant }}"]' >> $GITHUB_OUTPUT
           fi
@@ -63,6 +63,7 @@ jobs:
       RESUKISU_SETUP_URL: ${{ vars.RESUKISU_SETUP_URL }}
       KSUN_SETUP_URL:    ${{ vars.KSUN_SETUP_URL }}
       SUSFS_REPO:        ${{ vars.SUSFS_REPO }}
+      DROIDSPACES_REPO:  ${{ vars.DROIDSPACES_REPO }}
 
     steps:
       - name: Checkout — Workflow
@@ -95,6 +96,7 @@ jobs:
         working-directory: kernel
         env:
           CLANG_VARIANT: ${{ matrix.clang }}
+          KSU_VARIANT:   ${{ matrix.ksu }}
         run: bash "$GITHUB_WORKSPACE/scripts/build-kernel.sh"
 
       - name: Package

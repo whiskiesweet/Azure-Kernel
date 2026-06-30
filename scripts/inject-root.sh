@@ -63,3 +63,43 @@ fi
 if [ "${KSU_VARIANT}" = "VNL" ]; then
     echo "=== VNL — no root manager applied ==="
 fi
+
+# ── KWS (KowSU, no SUSFS, Droidspaces-ready) ──────────────────────────────────
+
+if [ "${KSU_VARIANT}" = "KWS" ]; then
+    echo "=== Applying KowSU (no SUSFS) ==="
+    rm -rf drivers/KowSU
+    git clone --depth=1 https://github.com/KOWX712/KernelSU drivers/KowSU
+
+    echo "--- Hooking KowSU into drivers/Makefile & drivers/Kconfig ---"
+    grep -q "KowSU/kernel" drivers/Makefile \
+        || echo "obj-y += KowSU/kernel/" >> drivers/Makefile
+    grep -q 'source "drivers/KowSU/kernel/Kconfig"' drivers/Kconfig \
+        || sed -i '/endmenu/i source "drivers/KowSU/kernel/Kconfig"' drivers/Kconfig
+
+    printf '\nCONFIG_KSU=y\nCONFIG_KSU_MANUAL_HOOK=n\n' \
+        >> arch/arm64/configs/gki_defconfig
+    echo "NOTE: SUSFS intentionally skipped for KWS (Droidspaces compatibility)."
+
+    echo "--- Verifying KowSU ---"
+    test -f drivers/KowSU/kernel/Kconfig || { echo "ERROR: drivers/KowSU/kernel/Kconfig missing" >&2; exit 1; }
+    grep -q "KowSU/kernel" drivers/Makefile || { echo "ERROR: Makefile hook missing" >&2; exit 1; }
+    grep -q 'source "drivers/KowSU/kernel/Kconfig"' drivers/Kconfig \
+        || { echo "ERROR: Kconfig hook missing" >&2; exit 1; }
+    echo "KowSU OK"
+
+    echo "--- Applying Droidspaces kABI fix patches (GKI, kernel 5.10) ---"
+    git clone --depth=1 "${DROIDSPACES_REPO}" droidspaces
+    PATCH_DIR="droidspaces/Documentation/resources/kernel-patches/GKI/below-kernel-6.12"
+    [ -d "$PATCH_DIR" ] || { echo "ERROR: Droidspaces GKI patch dir not found" >&2; exit 1; }
+
+    SYSVIPC_PATCH=$(find "$PATCH_DIR" -maxdepth 1 -name "001.GKI-below-6.12-fix_sysvipc_kabi*.patch" | head -n1)
+    MQUEUE_PATCH=$(find "$PATCH_DIR" -maxdepth 1 -name "002.5.10_or_lower_use_android_abi_padding_for_posix_mqueue.patch" | head -n1)
+    [ -f "$SYSVIPC_PATCH" ] || { echo "ERROR: SYSVIPC kABI patch not found" >&2; exit 1; }
+    [ -f "$MQUEUE_PATCH" ]  || { echo "ERROR: POSIX_MQUEUE kABI patch not found" >&2; exit 1; }
+
+    patch -p1 --fuzz=3 < "$SYSVIPC_PATCH"
+    patch -p1 --fuzz=3 < "$MQUEUE_PATCH"
+    rm -rf droidspaces
+    echo "Droidspaces kABI patches applied OK"
+fi
